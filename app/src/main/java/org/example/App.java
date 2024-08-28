@@ -14,32 +14,33 @@ public class App {
     public static void main(String[] args) {
         Pipeline pipeline = Pipeline.create(PipelineOptionsFactory.fromArgs(args).withValidation().create());
 
-        pipeline.apply("ReadFromPostgres", JdbcIO.<String[]>read()
+        pipeline.apply("ReadFromPostgres", JdbcIO.<Object[]>read()
                 .withDataSourceConfiguration(JdbcIO.DataSourceConfiguration.create(
                         "org.postgresql.Driver", "jdbc:postgresql://34.123.211.110:5432/test_db")
                         .withUsername("postgres")
                         .withPassword("rgukt"))
-                .withQuery("SELECT id, name FROM user1") // Query to fetch all necessary columns
-                .withRowMapper(new JdbcIO.RowMapper<String[]>() {
+                .withQuery("SELECT id, name FROM user_info")
+                .withRowMapper(new JdbcIO.RowMapper<Object[]>() {
                     @Override
-                    public String[] mapRow(ResultSet resultSet) throws SQLException {
-                        // Extract both columns from the result set
-                        return new String[] {
-                            resultSet.getString("id"),
-                            resultSet.getString("name")
+                    public Object[] mapRow(ResultSet resultSet) throws SQLException {
+                        // Extract id as Integer and name as String
+                        return new Object[] {
+                            resultSet.getInt("id"),          // 'id' as Integer
+                            resultSet.getString("name")      // 'name' as String
                         };
                     }
                 })
                 .withOutputParallelization(false))
-                .apply("WriteToPostgres", JdbcIO.<String[]>write()
+                .apply("WriteToPostgres", JdbcIO.<Object[]>write()
                         .withDataSourceConfiguration(JdbcIO.DataSourceConfiguration.create(
                                 "org.postgresql.Driver", "jdbc:postgresql://34.121.69.99:5432/sink_db")
                                 .withUsername("postgres")
                                 .withPassword("rgukt"))
-                        .withStatement("INSERT INTO user1 (id, name) VALUES (?, ?)")
-                        .withPreparedStatementSetter((JdbcIO.PreparedStatementSetter<String[]>) (element, query) -> {
-                            query.setString(1, element[0]); // Set 'id'
-                            query.setString(2, element[1]); // Set 'name'
+                        .withStatement("INSERT INTO user_info (id, name) VALUES (?, ?) " +
+                                       "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name")
+                        .withPreparedStatementSetter((JdbcIO.PreparedStatementSetter<Object[]>) (element, query) -> {
+                            query.setInt(1, (Integer) element[0]);     // Set 'id' as Integer
+                            query.setString(2, (String) element[1]);   // Set 'name' as String
                         }));
 
         pipeline.run().waitUntilFinish();
